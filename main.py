@@ -1,3 +1,4 @@
+import asyncio
 import locale
 
 import aiohttp
@@ -5,6 +6,7 @@ from aiogram import Bot
 from aiogram.dispatcher import Dispatcher
 from aiogram.types.message import ContentType
 from aiogram.utils import executor
+
 from config import *
 from utils import draw_image
 
@@ -20,15 +22,21 @@ async def location(message):
     lang = 'ru'
     units = 'metric'
 
-    # get current weather
-    async with aiohttp.ClientSession() as session:
-        url = f'https://api.openweathermap.org/data/2.5/weather?units={units}&lang={lang}&lat={lat}&lon={long}&appid={OPENWEATHER_TOKEN}'
-        async with session.get(url) as resp:
-            cur_data = await resp.json()
-            if cur_data['cod'] != 200:
+    async def obtain_data(url):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.ok:
+                    return await resp.json()
                 await message.answer(f"something wrong with your location")
 
-    img = draw_image(cur_data)
+    cur_url = f'https://api.openweathermap.org/data/2.5/weather?units={units}&lang={lang}&lat={lat}&lon={long}&appid={OPENWEATHER_TOKEN}'
+    forecast_url = f'https://api.openweathermap.org/data/2.5/onecall?units={units}&lang={lang}&lat={lat}&lon={long}&exclude=current,minutely,hourly,alerts&appid={OPENWEATHER_TOKEN}'
+
+    cur_data, forecast_data = await asyncio.gather(
+        obtain_data(cur_url),
+        obtain_data(forecast_url)
+    )
+    img = draw_image(cur_data, forecast_data)
 
     await message.answer_photo(img)
 
@@ -36,6 +44,7 @@ async def location(message):
 @dp.message_handler(commands=['start'])
 async def start(message):
     await message.reply("Hello! Please send me location to get weather forecast!")
+
 
 if __name__ == "__main__":
     executor.start_polling(dp)
